@@ -1,0 +1,91 @@
+
+CHIP Memory {
+    IN in[16], load, address[15];
+    OUT out[16];
+
+    PARTS:
+
+    // Decode memory regions
+    DMux4Way(
+        in=load,
+        sel=address[13..14],
+        a=loadRam1,
+        b=loadRam2,
+        c=loadScreen,
+        d=loadKeyboard
+    );
+
+    // Both RAM regions connect to RAM16K
+    Or(
+        a=loadRam1,
+        b=loadRam2,
+        out=loadRam
+    );
+
+    // RAM16K: 0x0000 - 0x3FFF
+    RAM16K(
+        in=in,
+        load=loadRam,
+        address=address[0..13],
+        out=ramOut
+    );
+
+    // Screen: 0x4000 - 0x5FFF
+    Screen(
+        in=in,
+        load=loadScreen,
+        address=address[0..12],
+        out=screenOut
+    );
+
+    // Keyboard: 0x6000 only
+    Keyboard(out=keyboardOut);
+
+    // Check whether lower 13 address bits are nonzero
+    Or8Way(
+        in=address[0..7],
+        out=lowNonZero
+    );
+
+    Or(a=address[8], b=address[9], out=upper1);
+    Or(a=address[10], b=address[11], out=upper2);
+    Or(a=upper1, b=upper2, out=upper3);
+    Or(a=upper3, b=address[12], out=upperNonZero);
+
+    Or(
+        a=lowNonZero,
+        b=upperNonZero,
+        out=lowerBitsNonZero
+    );
+
+    // Detect invalid keyboard-region addresses
+    And(
+        a=address[13],
+        b=address[14],
+        out=keyboardRegion
+    );
+
+    And(
+        a=keyboardRegion,
+        b=lowerBitsNonZero,
+        out=invalidAddress
+    );
+
+    // Select RAM, Screen or Keyboard
+    Mux4Way16(
+        a=ramOut,
+        b=ramOut,
+        c=screenOut,
+        d=keyboardOut,
+        sel=address[13..14],
+        out=selectedOut
+    );
+
+    // Invalid addresses return zero
+    Mux16(
+        a=selectedOut,
+        b[0..15]=false,
+        sel=invalidAddress,
+        out=out
+    );
+}
